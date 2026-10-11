@@ -1,0 +1,436 @@
+--[[
+    FE Troll Menu | simple sleek | loadstring ready
+    paste entire block into executor or wrap as loadstring([[ ... ]])()
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- // CONFIG
+local MENU_KEY = Enum.KeyCode.RightControl
+local THEME = {
+    bg = Color3.fromRGB(18, 18, 22),
+    panel = Color3.fromRGB(28, 28, 34),
+    accent = Color3.fromRGB(120, 80, 255),
+    text = Color3.fromRGB(235, 235, 245),
+    dim = Color3.fromRGB(140, 140, 155),
+    danger = Color3.fromRGB(220, 60, 80),
+    success = Color3.fromRGB(60, 200, 120)
+}
+
+-- // STATE
+local selectedPlayer = nil
+local menuOpen = true
+local connections = {}
+
+-- // UTILS
+local function cleanName(n)
+    return n:gsub("%s+", "")
+end
+
+local function getChar(plr)
+    return plr and plr.Character
+end
+
+local function getHum(plr)
+    local c = getChar(plr)
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRoot(plr)
+    local c = getChar(plr)
+    return c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c.PrimaryPart)
+end
+
+local function notify(msg, color)
+    color = color or THEME.accent
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "TrollNotify"
+    sg.ResetOnSpawn = false
+    sg.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(0, 260, 0, 36)
+    f.Position = UDim2.new(0.5, -130, 0, -50)
+    f.BackgroundColor3 = THEME.panel
+    f.BorderSizePixel = 0
+    f.Parent = sg
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 8)
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(1, -16, 1, 0)
+    t.Position = UDim2.new(0, 8, 0, 0)
+    t.BackgroundTransparency = 1
+    t.Text = msg
+    t.TextColor3 = color
+    t.Font = Enum.Font.GothamMedium
+    t.TextSize = 13
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.Parent = f
+    TweenService:Create(f, TweenInfo.new(0.25), {Position = UDim2.new(0.5, -130, 0, 18)}):Play()
+    task.delay(2.2, function()
+        TweenService:Create(f, TweenInfo.new(0.2), {Position = UDim2.new(0.5, -130, 0, -50)}):Play()
+        task.wait(0.25)
+        sg:Destroy()
+    end)
+end
+
+-- // GUI BUILD
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FE_TrollMenu"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 320, 0, 420)
+Main.Position = UDim2.new(0.5, -160, 0.5, -210)
+Main.BackgroundColor3 = THEME.bg
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(45, 45, 55)
+stroke.Thickness = 1
+stroke.Parent = Main
+
+-- title bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 42)
+TitleBar.BackgroundColor3 = THEME.panel
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Main
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
+local TitleFix = Instance.new("Frame")
+TitleFix.Size = UDim2.new(1, 0, 0, 14)
+TitleFix.Position = UDim2.new(0, 0, 1, -14)
+TitleFix.BackgroundColor3 = THEME.panel
+TitleFix.BorderSizePixel = 0
+TitleFix.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -50, 1, 0)
+Title.Position = UDim2.new(0, 14, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "troll  ·  fe"
+Title.TextColor3 = THEME.text
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 15
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -36, 0.5, -14)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = THEME.dim
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- player list
+local ListFrame = Instance.new("ScrollingFrame")
+ListFrame.Name = "PlayerList"
+ListFrame.Size = UDim2.new(1, -24, 0, 140)
+ListFrame.Position = UDim2.new(0, 12, 0, 54)
+ListFrame.BackgroundColor3 = THEME.panel
+ListFrame.BorderSizePixel = 0
+ListFrame.ScrollBarThickness = 3
+ListFrame.ScrollBarImageColor3 = THEME.accent
+ListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ListFrame.Parent = Main
+Instance.new("UICorner", ListFrame).CornerRadius = UDim.new(0, 8)
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.SortOrder = Enum.SortOrder.Name
+ListLayout.Padding = UDim.new(0, 4)
+ListLayout.Parent = ListFrame
+
+local ListPad = Instance.new("UIPadding")
+ListPad.PaddingTop = UDim.new(0, 6)
+ListPad.PaddingLeft = UDim.new(0, 6)
+ListPad.PaddingRight = UDim.new(0, 6)
+ListPad.Parent = ListFrame
+
+-- selected label
+local SelectedLbl = Instance.new("TextLabel")
+SelectedLbl.Size = UDim2.new(1, -24, 0, 22)
+SelectedLbl.Position = UDim2.new(0, 12, 0, 202)
+SelectedLbl.BackgroundTransparency = 1
+SelectedLbl.Text = "target: none"
+SelectedLbl.TextColor3 = THEME.dim
+SelectedLbl.Font = Enum.Font.Gotham
+SelectedLbl.TextSize = 12
+SelectedLbl.TextXAlignment = Enum.TextXAlignment.Left
+SelectedLbl.Parent = Main
+
+-- action buttons container
+local Actions = Instance.new("Frame")
+Actions.Size = UDim2.new(1, -24, 0, 170)
+Actions.Position = UDim2.new(0, 12, 0, 230)
+Actions.BackgroundTransparency = 1
+Actions.Parent = Main
+
+local ActLayout = Instance.new("UIGridLayout")
+ActLayout.CellSize = UDim2.new(0, 142, 0, 36)
+ActLayout.CellPadding = UDim2.new(0, 8, 0, 8)
+ActLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ActLayout.Parent = Actions
+
+local function makeBtn(name, order, color)
+    local b = Instance.new("TextButton")
+    b.Name = name
+    b.LayoutOrder = order
+    b.BackgroundColor3 = color or THEME.panel
+    b.Text = name
+    b.TextColor3 = THEME.text
+    b.Font = Enum.Font.GothamMedium
+    b.TextSize = 12
+    b.BorderSizePixel = 0
+    b.AutoButtonColor = false
+    b.Parent = Actions
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = THEME.accent}):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = color or THEME.panel}):Play()
+    end)
+    return b
+end
+
+local BtnKill = makeBtn("kill", 1)
+local BtnFling = makeBtn("fling", 2)
+local BtnBring = makeBtn("bring", 3)
+local BtnGoto = makeBtn("goto", 4)
+local BtnFreeze = makeBtn("freeze", 5)
+local BtnUnfreeze = makeBtn("unfreeze", 6)
+local BtnExplode = makeBtn("explode", 7, Color3.fromRGB(50, 30, 40))
+local BtnRefresh = makeBtn("refresh", 8)
+
+-- // PLAYER LIST LOGIC
+local function clearList()
+    for _, c in ipairs(ListFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+end
+
+local function refreshPlayers()
+    clearList()
+    local y = 0
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr \~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -4, 0, 28)
+            btn.BackgroundColor3 = Color3.fromRGB(36, 36, 44)
+            btn.Text = "  " .. plr.Name
+            btn.TextColor3 = THEME.text
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 12
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.BorderSizePixel = 0
+            btn.AutoButtonColor = false
+            btn.Parent = ListFrame
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+
+            btn.MouseButton1Click:Connect(function()
+                selectedPlayer = plr
+                SelectedLbl.Text = "target: " .. plr.Name
+                SelectedLbl.TextColor3 = THEME.accent
+                notify("selected " .. plr.Name)
+            end)
+            btn.MouseEnter:Connect(function()
+                TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(50, 50, 62)}):Play()
+            end)
+            btn.MouseLeave:Connect(function()
+                TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(36, 36, 44)}):Play()
+            end)
+            y = y + 32
+        end
+    end
+    ListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(y + 8, 140))
+end
+
+-- // ACTIONS (FE-safe methods)
+local function doKill()
+    if not selectedPlayer then return notify("no target", THEME.danger) end
+    local hum = getHum(selectedPlayer)
+    if not hum then return notify("no character", THEME.danger) end
+    -- classic FE kill via health + break joints if possible
+    pcall(function()
+        hum.Health = 0
+        local char = getChar(selectedPlayer)
+        if char then
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CanCollide = false
+                    p.Velocity = Vector3.new(0, -50, 0)
+                end
+            end
+        end
+    end)
+    notify("killed " .. selectedPlayer.Name, THEME.success)
+end
+
+local function doFling()
+    if not selectedPlayer then return notify("no target", THEME.danger) end
+    local root = getRoot(selectedPlayer)
+    local myRoot = getRoot(LocalPlayer)
+    if not root or not myRoot then return notify("missing root", THEME.danger) end
+    pcall(function()
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        bv.Velocity = Vector3.new(9999, 9999, 9999)
+        bv.Parent = root
+        task.delay(0.15, function()
+            if bv and bv.Parent then bv:Destroy() end
+        end)
+        -- also spin
+        local bang = Instance.new("BodyAngularVelocity")
+        bang.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        bang.AngularVelocity = Vector3.new(0, 9999, 0)
+        bang.Parent = root
+        task.delay(0.2, function()
+            if bang and bang.Parent then bang:Destroy() end
+        end)
+    end)
+    notify("flung " .. selectedPlayer.Name, THEME.success)
+end
+
+local function doBring()
+    if not selectedPlayer then return notify("no target", THEME.danger) end
+    local root = getRoot(selectedPlayer)
+    local myRoot = getRoot(LocalPlayer)
+    if not root or not myRoot then return notify("missing root", THEME.danger) end
+    pcall(function()
+        root.CFrame = myRoot.CFrame * CFrame.new(0, 0, -3)
+    end)
+    notify("brought " .. selectedPlayer.Name, THEME.success)
+end
+
+local function doGoto()
+    if not selectedPlayer then return notify("no target", THEME.danger) end
+    local root = getRoot(selectedPlayer)
+    local myRoot = getRoot(LocalPlayer)
+    if not root or not myRoot then return notify("missing root", THEME.danger) end
+    pcall(function()
+        myRoot.CFrame = root.CFrame * CFrame.new(0, 0, 3)
+    end)
+    notify("went to " .. selectedPlayer.Name, THEME.success)
+end
+
+local function doFreeze()
+    if not selectedPlayer then return notify("no target", THEME.danger) end
+    local hum = getHum(selectedPlayer)
+    local root = getRoot(selectedPlayer)
+    if not hum then return notify("no humanoid", THEME.danger) end
+    pcall(function()
+        hum.WalkSpeed = 0
+        hum.JumpPower = 0
+        hum.JumpHeight = 0
+        if root then
+            root.Anchored = true
+        end
+    end)
+    notify("froze " .. selectedPlayer.Name, THEME.success)
+end
+
+local function doUnfreeze()
+    if not selectedPlayer then return notify("no target", THEME.danger) end
+    local hum = getHum(selectedPlayer)
+    local root = getRoot(selectedPlayer)
+    if not hum then return notify("no humanoid", THEME.danger) end
+    pcall(function()
+        hum.WalkSpeed = 16
+        hum.JumpPower = 50
+        hum.JumpHeight = 7.2
+        if root then
+            root.Anchored = false
+        end
+    end)
+    notify("unfroze " .. selectedPlayer.Name, THEME.success)
+end
+
+local function doExplode()
+    if not selectedPlayer then return notify("no target", THEME.danger) end
+    local root = getRoot(selectedPlayer)
+    if not root then return notify("no root", THEME.danger) end
+    pcall(function()
+        local e = Instance.new("Explosion")
+        e.Position = root.Position
+        e.BlastRadius = 12
+        e.BlastPressure = 500000
+        e.Parent = workspace
+    end)
+    notify("exploded " .. selectedPlayer.Name, THEME.success)
+end
+
+-- // WIRE BUTTONS
+BtnKill.MouseButton1Click:Connect(doKill)
+BtnFling.MouseButton1Click:Connect(doFling)
+BtnBring.MouseButton1Click:Connect(doBring)
+BtnGoto.MouseButton1Click:Connect(doGoto)
+BtnFreeze.MouseButton1Click:Connect(doFreeze)
+BtnUnfreeze.MouseButton1Click:Connect(doUnfreeze)
+BtnExplode.MouseButton1Click:Connect(doExplode)
+BtnRefresh.MouseButton1Click:Connect(function()
+    refreshPlayers()
+    notify("list refreshed")
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    menuOpen = false
+    Main.Visible = false
+    notify("menu hidden · " .. MENU_KEY.Name .. " to reopen")
+end)
+
+-- // TOGGLE
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == MENU_KEY then
+        menuOpen = not menuOpen
+        Main.Visible = menuOpen
+    end
+end)
+
+-- // DRAG
+local dragging, dragStart, startPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+    end
+end)
+TitleBar.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- // INIT
+refreshPlayers()
+Players.PlayerAdded:Connect(refreshPlayers)
+Players.PlayerRemoving:Connect(function(p)
+    if selectedPlayer == p then
+        selectedPlayer = nil
+        SelectedLbl.Text = "target: none"
+        SelectedLbl.TextColor3 = THEME.dim
+    end
+    refreshPlayers()
+end)
+
+notify("troll menu loaded · " .. MENU_KEY.Name)
